@@ -15,28 +15,40 @@ gulp.task('middleware-test', ['lint'], function () {
     .pipe(mocha({timeout: 2000}));
 });
 
-gulp.task('dbauth-test', ['middleware-test'], function () {
+/*gulp.task('dbauth-test', ['middleware-test'], function () {
   return gulp.src(['test/dbauth.spec.js'], {read: false})
     .pipe(mocha({timeout: 2000}));
-});
+});*/
 
-gulp.task('session-test', ['dbauth-test'], function () {
+//gulp.task('session-test', ['dbauth-test'], function () {
+  gulp.task('session-test', ['middleware-test'], function () {
   return gulp.src(['test/session.spec.js'], {read: false})
     .pipe(mocha({timeout: 2000}));
 });
 
-gulp.task('mailer-test', ['dbauth-test'], function () {
+gulp.task('mailer-test', ['middleware-test'], function () {
   return gulp.src(['test/mailer.spec.js'], {read: false})
     .pipe(mocha({timeout: 2000}));
 });
 
-gulp.task('user-test', ['dbauth-test'], function () {
+gulp.task('user-test', ['middleware-test'], function () {
+  return gulp.src(['test/user.spec.js'], {read: false})
+    .pipe(mocha({timeout: 2000}));
+});
+
+gulp.task('user', function () {
   return gulp.src(['test/user.spec.js'], {read: false})
     .pipe(mocha({timeout: 2000}));
 });
 
 gulp.task('final-test', ['user-test'], function () {
-  return gulp.src(['test/test.js'], {read: false})
+  return gulp.src(['test/test-realm.js'], {read: false})
+    .pipe(mocha({timeout: 2000}));
+});
+
+gulp.task('final', function () {
+  //return gulp.src(['test/test-realm.js'], {read: false})
+  return gulp.src(['test/user.spec.js'], {read: false})
     .pipe(mocha({timeout: 2000}));
 });
 

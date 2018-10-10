@@ -16,16 +16,19 @@ describe('SuperLogin', function() {
 
   var app;
   var superlogin;
-  var userDB, keysDB;
+  var userDB, userDB2, keysDB;
   var previous;
-  var accessToken;
-  var accessPass;
+  var accessToken, realm2AccessToken;
+  var accessPass, realm2AccessPass;
   var expireCompare;
   var resetToken = null;
 
-  var config = require('./test.config');
+  var config = require('./test.config.js');
   var server = 'http://localhost:5000';
   var dbUrl = util.getDBURL(config.dbServer);
+
+  var realm = 'abcdef';
+  var realm2 = 'ghijkl';
 
   var newUser = {
     name: 'Kewl Uzer',
@@ -33,6 +36,14 @@ describe('SuperLogin', function() {
     email: 'kewluzer@example.com',
     password: '1s3cret',
     confirmPassword: '1s3cret'
+  };
+
+  var realm2NewUser = {
+    name: 'Kewl Uzer',
+    username: 'kewluzer',
+    email: 'kewluzer@example.com',
+    password: '1s3cret123',
+    confirmPassword: '1s3cret123'
   };
 
   var newUser2 = {
@@ -44,23 +55,26 @@ describe('SuperLogin', function() {
   };
 
   before(function() {
-    userDB = new PouchDB(dbUrl + "/sl_test-users");
+    userDB = new PouchDB(dbUrl + "/users_" + realm);
+    userDB2 = new PouchDB(dbUrl + "/users_" + realm2);
     keysDB = new PouchDB(dbUrl + "/sl_test-keys");
-    app = require('./test-server')(config);
+    app = require('./test-server.js')(config);
     app.superlogin.onCreate(function(userDoc, provider) {
-      console.log('===================Running onCreate...');
       userDoc.profile = {name: userDoc.name};
       return BPromise.resolve(userDoc);
     });
 
-    previous = seed(userDB, require('../designDocs/user-design'));
+    previous = seed(userDB, require('../designDocs/user-design.js'))
+    .then(function(res){
+      return seed(userDB2, require('../designDocs/user-design.js'));
+    });
     return previous;
   });
 
   after(function() {
     return previous
       .then(function() {
-        return BPromise.all([userDB.destroy(), keysDB.destroy()]);
+        return BPromise.all([userDB.destroy(), userDB2.destroy(),keysDB.destroy()]);
       })
       .then(function() {
         // console.log('DBs Destroyed');
@@ -73,6 +87,7 @@ describe('SuperLogin', function() {
       return new BPromise(function(resolve, reject) {
         request
           .post(server + '/auth/register')
+          .set('realm', realm)
           .send(newUser)
           .end(function(err, res) {
             if (err) return reject(err);
@@ -96,7 +111,8 @@ describe('SuperLogin', function() {
         .then(function() {
           return new BPromise(function(resolve, reject) {
             request
-              .get(server + '/auth/confirm-email/' + emailToken)
+              
+              .get(server + '/auth/confirm-email/' + realm + '/' + emailToken)
               .end(function(err, res) {
                 if (err) return reject(err);
                 expect(res.status).to.equal(200);
@@ -113,6 +129,7 @@ describe('SuperLogin', function() {
       return new BPromise(function(resolve, reject) {
         request
           .post(server + '/auth/login')
+          .set('realm', realm)
           .send({ username: newUser.username, password: newUser.password })
           .end(function(err, res) {
             if (err) return reject(err);
@@ -135,10 +152,139 @@ describe('SuperLogin', function() {
         request
           .get(server + '/auth/session')
           .set('Authorization', 'Bearer ' + accessToken + ':' + accessPass)
+          .set('realm', realm)
           .end(function(err, res) {
             if (err) return reject(err);
             expect(res.status).to.equal(200);
             // console.log('Secure endpoint successfully accessed.');
+            resolve();
+          });
+      });
+    });
+  });
+
+  it('REALM2 : should create a new user', function() {
+    return previous.then(function() {
+      return new BPromise(function(resolve, reject) {
+        request
+          .post(server + '/auth/register')
+          .set('realm', realm2)
+          .send(realm2NewUser)
+          .end(function(err, res) {
+            if (err) return reject(err);
+            expect(res.status).to.equal(201);
+            expect(res.body.success).to.equal('User created.');
+            // console.log('User created');
+            resolve();
+          });
+      });
+    });
+  });
+
+  it('REALM2 : should verify the email', function() {
+    var emailToken;
+    return previous.then(function() {
+      return userDB2.get('kewluzer')
+        .then(function(record) {
+          emailToken = record.unverifiedEmail.token;
+          return 1;
+        })
+        .then(function() {
+          return new BPromise(function(resolve, reject) {
+            request
+              .get(server + '/auth/confirm-email/' + realm2 + '/' + emailToken)
+              .end(function(err, res) {
+                if (err) return reject(err);
+                expect(res.status).to.equal(200);
+                // console.log('Email successfully verified.');
+                resolve();
+              });
+          });
+        });
+    });
+  });
+
+  it('REALM2 : should login the user', function() {
+    return previous.then(function() {
+      return new BPromise(function(resolve, reject) {
+        request
+          .post(server + '/auth/login')
+          .set('realm', realm2)
+          .send({ username: realm2NewUser.username, password: realm2NewUser.password })
+          .end(function(err, res) {
+            if (err) return reject(err);
+            realm2AccessToken = res.body.token;
+            realm2AccessPass = res.body.password;
+            expect(res.status).to.equal(200);
+            expect(res.body.roles[0]).to.equal('user');
+            expect(res.body.token.length).to.be.above(10);
+            expect(res.body.profile.name).to.equal(realm2NewUser.name);
+            // console.log('User successfully logged in');
+            resolve();
+          });
+      });
+    });
+  });
+
+  it('REALM2 : should access a protected endpoint', function() {
+    return previous.then(function() {
+      return new BPromise(function(resolve, reject) {
+        request
+          .get(server + '/auth/session')
+          .set('Authorization', 'Bearer ' + realm2AccessToken + ':' + realm2AccessPass)
+          .set('realm', realm2)
+          .end(function(err, res) {
+            if (err) return reject(err);
+            expect(res.status).to.equal(200);
+            // console.log('Secure endpoint successfully accessed.');
+            resolve();
+          });
+      });
+    });
+  });
+
+  it('REALM2 : should logout the user', function() {
+    return previous
+      .then(function() {
+        return new BPromise(function(resolve, reject) {
+          request
+            .post(server + '/auth/logout')
+            .set('realm', realm2)
+            .set('Authorization', 'Bearer ' + realm2AccessToken + ':' + realm2AccessPass)
+            .end(function(error, res) {
+              if(error || res.status !== 200) {
+                throw new Error('Failed to logout the user.');
+              }
+              expect(res.status).to.equal(200);
+              resolve();
+            });
+      })
+        .then(function() {
+          return new BPromise(function(resolve, reject) {
+            request
+              .get(server + '/auth/session')
+              .set('realm', realm2)
+              .set('Authorization', 'Bearer ' + realm2AccessToken + ':' + realm2AccessPass)
+              .end(function(error, res) {
+                expect(res.status).to.equal(401);
+                // console.log('User has been successfully logged out.');
+                resolve();
+              });
+          });
+        });
+    });
+  });
+
+  it('REALM2 : should not login the user with realm1 credentials', function() {
+    return previous.then(function() {
+      return new BPromise(function(resolve, reject) {
+        request
+          .post(server + '/auth/login')
+          .set('realm', realm2)
+          .send({ username: newUser.username, password: newUser.password })
+          .end(function(err, res) {
+            //if (err) console.log(JSON.stringify(err));
+            expect(res.status).to.equal(401);
             resolve();
           });
       });
@@ -150,6 +296,7 @@ describe('SuperLogin', function() {
       return new BPromise(function(resolve, reject) {
         request
           .get(server + '/user')
+          .set('realm', realm)
           .set('Authorization', 'Bearer ' + accessToken + ':' + accessPass)
           .end(function(err, res) {
             if (err) return reject(err);
@@ -166,6 +313,7 @@ describe('SuperLogin', function() {
       return new BPromise(function(resolve, reject) {
         request
           .get(server + '/admin')
+          .set('realm', realm)
           .set('Authorization', 'Bearer ' + accessToken + ':' + accessPass)
           .end(function(err, res) {
             //if (err) return reject(err);
@@ -184,6 +332,7 @@ describe('SuperLogin', function() {
       return new BPromise(function(resolve, reject) {
         request
           .post(server + '/auth/forgot-password')
+          .set('realm', realm)
           .send({email: newUser.email})
           .end(function(err, res) {
             if (err) return reject(err);
@@ -205,6 +354,7 @@ describe('SuperLogin', function() {
           return new BPromise(function(resolve, reject) {
             request
               .post(server + '/auth/password-reset')
+              .set('realm', realm)
               .send({token: resetToken, password: 'newpass', confirmPassword: 'newpass'})
               .end(function(error, res) {
                 if(error || res.status !== 200) {
@@ -224,6 +374,7 @@ describe('SuperLogin', function() {
       return new BPromise(function(resolve, reject) {
         request
           .get(server + '/auth/session')
+          .set('realm', realm)
           .set('Authorization', 'Bearer ' + accessToken + ':' + accessPass)
           .end(function(err, res) {
             //if (err) return reject(err);
@@ -240,6 +391,7 @@ describe('SuperLogin', function() {
       return new BPromise(function(resolve, reject) {
         request
           .post(server + '/auth/login')
+          .set('realm', realm)
           .send({ username: newUser.username, password: 'newpass' })
           .end(function(err, res) {
             if (err) return reject('Failed to log in. ' + err);
@@ -261,6 +413,7 @@ describe('SuperLogin', function() {
       return new BPromise(function(resolve, reject) {
         request
           .post(server + '/auth/refresh')
+          .set('realm', realm)
           .set('Authorization', 'Bearer ' + accessToken + ':' + accessPass)
           .end(function(err, res) {
             if (err) return reject(err);
@@ -280,6 +433,7 @@ describe('SuperLogin', function() {
           return new BPromise(function(resolve, reject) {
             request
               .post(server + '/auth/password-change')
+              .set('realm', realm)
               .set('Authorization', 'Bearer ' + accessToken + ':' + accessPass)
               .send({currentPassword: 'newpass', newPassword: 'newpass2', confirmPassword: 'newpass2'})
               .end(function(error, res) {
@@ -301,6 +455,7 @@ describe('SuperLogin', function() {
         return new BPromise(function(resolve, reject) {
           request
             .post(server + '/auth/logout')
+            .set('realm', realm)
             .set('Authorization', 'Bearer ' + accessToken + ':' + accessPass)
             .end(function(error, res) {
               if(error || res.status !== 200) {
@@ -314,6 +469,7 @@ describe('SuperLogin', function() {
           return new BPromise(function(resolve, reject) {
             request
               .get(server + '/auth/session')
+              .set('realm', realm)
               .set('Authorization', 'Bearer ' + accessToken + ':' + accessPass)
               .end(function(error, res) {
                 expect(res.status).to.equal(401);
@@ -331,6 +487,7 @@ describe('SuperLogin', function() {
       return new BPromise(function(resolve, reject) {
         request
           .post(server + '/auth/register')
+          .set('realm', realm)
           .send(newUser2)
           .end(function(error, res) {
             expect(res.status).to.equal(200);
@@ -350,6 +507,7 @@ describe('SuperLogin', function() {
         return new BPromise(function(resolve, reject) {
           request
             .get(server + '/auth/validate-username/idontexist')
+            .set('realm', realm)
             .end(function(error, res) {
               expect(res.status).to.equal(200);
               expect(res.body.ok).to.equal(true);
@@ -361,6 +519,7 @@ describe('SuperLogin', function() {
         return new BPromise(function(resolve, reject) {
           request
             .get(server + '/auth/validate-username/kewluzer')
+            .set('realm', realm)
             .end(function(error, res) {
               expect(res.status).to.equal(409);
               // console.log('Validate Username is working');
@@ -376,6 +535,7 @@ describe('SuperLogin', function() {
         return new BPromise(function(resolve, reject) {
           request
             .get(server + '/auth/validate-email/nobody@example.com')
+            .set('realm', realm)
             .end(function(error, res) {
               expect(res.status).to.equal(200);
               expect(res.body.ok).to.equal(true);
@@ -387,6 +547,7 @@ describe('SuperLogin', function() {
         return new BPromise(function(resolve, reject) {
           request
             .get(server + '/auth/validate-username/kewluzer@example.com')
+            .set('realm', realm)
             .end(function(error, res) {
               expect(res.status).to.equal(409);
               // console.log('Validate Email is working');
@@ -400,6 +561,7 @@ describe('SuperLogin', function() {
     return new BPromise(function(resolve, reject) {
       request
         .post(server + '/auth/login')
+        .set('realm', realm)
         .send({ username: username, password: password })
         .end(function(error, res) {
           resolve({status: res.status, message: res.body.message});

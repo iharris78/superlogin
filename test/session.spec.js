@@ -5,6 +5,10 @@ var Session = require('../lib/session');
 var Configure = require('../lib/configure');
 var rimraf = BPromise.promisify(require('rimraf'));
 
+var RedisAdapter = require('../lib/sessionAdapters/RedisAdapter');
+var MemoryAdapter = require('../lib/sessionAdapters/MemoryAdapter');
+var FileAdapter = require('../lib/sessionAdapters/FileAdapter');
+
 var testToken = {
   _id: 'colinskow',
   roles: ['admin', 'user'],
@@ -29,14 +33,27 @@ var fileConfig = new Configure({
   }
 });
 
+function setupAdapter(config){
+  var adapter;
+  var sessionAdapter = config.getItem('session.adapter');
+  if(sessionAdapter === 'redis') {
+    adapter = new RedisAdapter(config);
+  } else if (sessionAdapter === 'file') {
+    adapter = new FileAdapter(config);
+  } else {
+    adapter = new MemoryAdapter();
+  }
+  return adapter;
+}
+
 describe('Session', function() {
-  return runTest(config, 'Memory adapter')
+  return runTest(config, setupAdapter(config))
     .finally(function() {
-      return runTest(fileConfig, 'File adapter');
+      return runTest(fileConfig, setupAdapter(fileConfig));
     })
     .finally(function() {
       config.setItem('session.adapter', 'redis');
-      return runTest(config, 'Redis adapter');
+      return runTest(config, setupAdapter(config));
     })
     .finally(function() {
       return rimraf('./.session');
@@ -45,12 +62,12 @@ describe('Session', function() {
 
 function runTest(config, adapter) {
 
-  var session = new Session(config);
+  var session = new Session(config, adapter);
   var previous;
 
   return new BPromise(function(resolve, reject) {
 
-    describe(adapter, function() {
+    describe(config.getItem('session.adapter'), function() {
 
       it('should store a token', function(done) {
         previous = session.storeToken(testToken)
