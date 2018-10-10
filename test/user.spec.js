@@ -38,6 +38,8 @@ var testUserForm = {
   zipcode: 'ABC123'
 };
 
+var realm = 'abcdef';
+
 var emailUserForm = {
   name: 'Awesome',
   email: 'awesome@example.com',
@@ -274,7 +276,7 @@ describe('User Model', function() {
     return previous
       .then(function() {
         // console.log('Creating session');
-        return user.createSession(testUserForm.username, 'local', req);
+        return user.createSession(testUserForm.username, realm, 'local', req);
       })
       .then(function(result) {
         sessionKey = result.token;
@@ -374,12 +376,12 @@ describe('User Model', function() {
     return previous
       .then(function() {
         // console.log('Logging user out completely');
-        return user.createSession(testUserForm.username, 'local', req);
+        return user.createSession(testUserForm.username, realm, 'local', req);
       })
       .then(function(session1) {
         sessions[0] = session1.token;
         passes[0] = session1.password;
-        return user.createSession(testUserForm.username, 'local', req);
+        return user.createSession(testUserForm.username, realm, 'local', req);
       })
       .then(function(session2) {
         sessions[1] = session2.token;

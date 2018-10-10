@@ -26,12 +26,12 @@ gulp.task('middleware-test', ['lint'], function () {
     .pipe(mocha({timeout: 2000}));
 });
 
-gulp.task('mailer-test', ['middleware-test'], function () {
+gulp.task('mailer-test', ['session-test'], function () {
   return gulp.src(['test/mailer.spec.js'], {read: false})
     .pipe(mocha({timeout: 2000}));
 });
 
-gulp.task('user-test', ['middleware-test'], function () {
+gulp.task('user-test', ['mailer-test'], function () {
   return gulp.src(['test/user.spec.js'], {read: false})
     .pipe(mocha({timeout: 2000}));
 });
@@ -48,7 +48,7 @@ gulp.task('final-test', ['user-test'], function () {
 
 gulp.task('final', function () {
   //return gulp.src(['test/test-realm.js'], {read: false})
-  return gulp.src(['test/user.spec.js'], {read: false})
+  return gulp.src(['test/test-realm.js'], {read: false})
     .pipe(mocha({timeout: 2000}));
 });
 

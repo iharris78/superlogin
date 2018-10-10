@@ -24,7 +24,8 @@ var mailerTestConfig = new Configure({
 var req = {
   protocol: 'https',
   headers: {
-    host: 'example.com'
+    host: 'example.com',
+    realm: 'abcdef'
   }
 };
 
@@ -46,7 +47,7 @@ describe('Mailer', function() {
         expect(response.search('To: super@example.com')).to.be.greaterThan(-1);
         expect(response.search('Subject: Please confirm your email')).to.be.greaterThan(-1);
         expect(response.search('Hi Super,')).to.be.greaterThan(-1);
-        expect(response.search('https://example.com/auth/confirm-email/abc123')).to.be.greaterThan(-1);
+        expect(response.search('https://example.com/auth/confirm-email/abcdef/abc123')).to.be.greaterThan(-1);
       });
   });
 
