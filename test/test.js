@@ -48,7 +48,6 @@ describe('SuperLogin', function() {
     keysDB = new PouchDB(dbUrl + "/sl_test-keys");
     app = require('./test-server')(config);
     app.superlogin.onCreate(function(userDoc, provider) {
-      console.log('===================Running onCreate...');
       userDoc.profile = {name: userDoc.name};
       return BPromise.resolve(userDoc);
     });
